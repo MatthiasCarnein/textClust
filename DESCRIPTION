@@ -1,0 +1,16 @@
+Package: textClust
+Type: Package
+Title: textClust
+Version: 1.0.0
+Author: Matthias Carnein, Dennis Assenmacher
+Maintainer:  Matthias Carnein <matthias.carnein@uni-muenster.de>, Dennis Assenmacher <dennis.assenmacher@wi.uni-muenster.de>
+Description: Clustering text stream
+License: GPL3
+LazyData: TRUE
+Imports:
+    Rcpp (>= 0.12.9),
+    tokenizers,
+    stream
+Suggests: zoom
+LinkingTo: Rcpp
+RoxygenNote: 6.0.1
