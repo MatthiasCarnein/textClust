@@ -52,8 +52,8 @@ The algorithm assumes that the data-file comes in the following form (without th
 
 | Time | User | Text |
 | -----| -----| ---- |
-| 03/28/2017 14:59:48 | Albert Einstein |	The difference between stupidity and genius is that genius has its limits. |
-| 03/28/2017 15:00:10 | Dennis |	Well said, Albert! |
+| 03/28/2017 14:59:48 | Albert Einstein |	Don't believe every quote you read on the internet! |
+| 03/28/2017 15:00:10 | Abraham Lincoln |	Well said, Albert! |
 | 03/28/2017 15:00:43 | Albert Einstein |	Thank you! |
 
 In our paper, we used the implemented algorithm to cluster chat messages from the streaming platform Twitch. In general, however, any kind of text data can be analysed.
