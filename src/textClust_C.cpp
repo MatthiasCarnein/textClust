@@ -18,16 +18,17 @@ public:
   Rcpp::List micro;
 
 
-  textClust(double r_, double lambda_, int tgap_, bool updateAll_, bool verbose_, bool termFading_) :
-    r(r_),
-    lambda(lambda_),
-    tgap(tgap_),
-    updateAll(updateAll_),
-    verbose(verbose_) {
-    omega = pow(2, (-1*lambda * tgap));
-    t = 0;
-    upToDate=1;
-    termFading = termFading_;
+  textClust(double r, double lambda, int tgap, bool updateAll, bool verbose, bool termFading){
+    this->r = r;
+    this->lambda = lambda;
+    this->tgap = tgap;
+    this->updateAll = updateAll;
+    this->verbose = verbose;
+    this->omega = 0;
+    if(lambda!=0) this->omega = pow(2, (-1*lambda * tgap));
+    this->t = 0;
+    this->upToDate=1;
+    this->termFading = termFading;
   };
 
   textClust(Rcpp::List serialized) {

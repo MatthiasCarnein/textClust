@@ -111,7 +111,7 @@ textClust_R$methods(
       difference = difftime(Sys.time(),startTime,units="secs")
       throughput[textClust_C$t] <<- difference
       if(textClust_C$verbose){
-        print(paste("Difference: ",difference))
+        print(paste("Time Difference: ",difference))
         # print(paste("msg/s: ",counter))
       }
 

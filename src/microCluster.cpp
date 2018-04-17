@@ -46,18 +46,16 @@ void MicroCluster::merge(MicroCluster mc, int t, int omega, double lambda){
     if(tf.containsElementNamed(v(i))) tfVal = tf[name];
     if(mc.tf.containsElementNamed(v(i))) mctfVal = mc.tf[name];
 
-    finalList[name]=tfVal + mctfVal;
-    // finalList.push_back(Rcpp::Named(name, (int)tf[name] + (int)mc.tf[name]));
+    finalList[name] = tfVal + mctfVal;
   }
 
-  //update time
   this->time = t;
+  this->tf = finalList;
 }
 
 void MicroCluster::fade(int tnow, double omega, double lambda, bool termFading){
   //fade cluster
   this->weight = this->weight *  pow(2,(-lambda * (tnow-this->time)));
-
   //fade tokens
   //Here we fade each single entry in our TF vector according to lambda and the passed time
   //From last index to first one in order to prevent problems with indices
