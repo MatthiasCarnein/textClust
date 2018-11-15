@@ -4,17 +4,26 @@
 \alias{nclusters.DSC_textClust}
 \title{Number of clusters for DSC_textClust}
 \usage{
-nclusters.DSC_textClust(x, type = c("auto", "micro", "macro"), ...)
+\method{nclusters}{DSC_textClust}(x, type = c("auto", "micro", "macro"),
+  ...)
 }
 \arguments{
 \item{x}{object of class DSC_textClust}
+
+\item{type}{whether micro or macro clusters should be counted}
+
+\item{...}{optional arguments passed to get_centers}
 }
 \description{
 Returns the number of clusters for DSC_textClust
 }
 \examples{
-algorithm = DSC_textClust(lambda=0.001, r=0.2, tgap=100, verbose=T)
-print(algorithm)
+data = data.frame(text=sample(c("Main Topic", "Similar Topic", "Something Different"), size=1000, replace=T),stringsAsFactors=F)
+stream = DSD_Memory(data)  ## Alternatively: stream = DSD_ReadCSV("file.txt", sep = "\\t", comment.char="", quote="")
+algorithm = DSC_textClust(r=.4, lambda=0.1, tgap=100, nmin=1, nmax=2, k=3, stopword=c(), minWeight=3, textCol=1)
+update(algorithm, stream, n=1000)
+
+nclusters(algorithm)
 
 }
 \author{

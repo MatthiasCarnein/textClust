@@ -4,7 +4,7 @@
 \alias{textClust_R_cluster}
 \title{Clustering procedure of textClust}
 \arguments{
-\item{newdata}{matrix of data with three columns (time, username, message)}
+\item{newdata}{matrix of text in a single column}
 }
 \description{
 Main clustering procedure of textClust

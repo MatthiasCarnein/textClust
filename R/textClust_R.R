@@ -2,16 +2,20 @@
 #'
 #' Maintains the current clustering and implements the stream package interfaces.
 #'
-#' @field textClust_C Exposed C++ class
+#' @field C Exposed C++ class
 #' @field nmin min number of ngrams to use
 #' @field nmax max number of ngrams to use
 #' @field k number of clusters
 #' @field h height for hierarchical clustering
-#' @field upToDate logical whether macro-clusters are up to date or need to be recomputed
 #' @field microMacroAssignment assignment vector associating micro-clusters to a maco-cluster
-#' @field hc hclust object
 #' @field throughput stores the throughput of messages
 #' @field termFading logical whether individual terms should be faded
+#' @field stopword chracter vector of stopwords to remove
+#' @field linkage method for hierarchical clustering
+#' @field weightedReclustering logical whether reclustering should consider cluster weights
+#' @field minWeight minimum weight of micro clusters to be used for reclustering
+#' @field textCol index of column that contains the text
+#' @field timeCol index of column that contains the timestamps
 #'
 #' @author
 #' Dennis Assenmacher \email{dennis.assenmacher@@wi.uni-muenster.de}
@@ -19,18 +23,27 @@
 #'
 #' @export textClust_R
 textClust_R <- setRefClass("textClust_R",
-                                    fields = list(
-                                      textClust_C ="ANY",
-                                      nmin="integer",
-                                      nmax="integer",
-                                      k="integer",
-                                      h="numeric",
-                                      upToDate = "logical",
-                                      microMacroAssignment = "integer",
-                                      hc="ANY",
-                                      throughput = "numeric",
-                                      termFading = "logical"
-                                    ))
+                           fields = list(
+                             C ="ANY",
+                             nmin="integer",
+                             nmax="integer",
+                             k="integer",
+                             h="numeric",
+                             microMacroAssignment = "integer",
+                             throughput = "numeric",
+                             termFading = "logical",
+                             stopword = "character",
+                             linkage="character",
+                             weightedReclustering="logical",
+                             minWeight="numeric",
+                             textCol = "integer",
+                             timeCol = "integer",
+                             currenttime = "character",
+                             hc = "ANY",
+                             groupByCol = "integer",
+                             parentTextCol = "integer",
+                             parentTimeCol = "integer"
+                           ))
 
 
 #' Constructor of textClust
@@ -43,20 +56,26 @@ textClust_R <- setRefClass("textClust_R",
 #' @param tgap Time-interval for outlier detection and clean-up
 #' @param nmin min number of ngrams to use
 #' @param nmax max number of ngrams to use
-#' @param updateAll logical whether a new observations is used to update all micro-clusters within \code{r} or just the closest.
 #' @param k number of clusters
 #' @param h height for hierarchical clustering
 #' @param verbose logical whether to be more verbose
 #' @param termFading logical whether individual terms should be faded
+#' @param stopword chracter vector of stopwords to remove
+#' @param linkage method for hierarchical clustering
+#' @param weightedReclustering logical whether reclustering should consider cluster weights
+#' @param minWeight minimum weight of micro clusters to be used for reclustering
+#' @param textCol index of column that contains the text which should be clustered
+#' @param timeCol index of column that contains timestamps
 #'
+
 #' @author
 #' Dennis Assenmacher \email{dennis.assenmacher@@wi.uni-muenster.de}
 #' Matthias Carnein \email{matthias.carnein@@uni-muenster.de}
 #'
-#' @return refernce class object
+#' @return reference class object
 NULL
 textClust_R$methods(
-  initialize = function(r, lambda, tgap, nmin, nmax, updateAll, k, h, verbose, termFading) {
+  initialize = function(r, lambda, tgap, nmin, nmax, k, h, verbose, termFading, stopword, linkage, weightedReclustering, minWeight, textCol, timeCol, groupByCol, parentTextCol, parentTimeCol) {
     ## fields in the r context
     nmin <<- as.integer(nmin)
     nmax <<- as.integer(nmax)
@@ -64,8 +83,19 @@ textClust_R$methods(
     h <<- as.numeric(h)
     throughput <<-numeric()
     microMacroAssignment <<- integer()
+    stopword <<- as.character(stopword)
+    linkage <<- as.character(linkage)
+    weightedReclustering <<- as.logical(weightedReclustering)
+    minWeight <<- as.numeric(minWeight)
+    textCol <<- as.integer(textCol)
+    timeCol <<- as.integer(timeCol)
+    currenttime <<- NA_character_
+    hc <<- NULL
+    groupByCol <<- as.integer(groupByCol)
+    parentTextCol <<- as.integer(parentTextCol)
+    parentTimeCol <<- as.integer(parentTimeCol)
     ## rest is passed to C class
-    textClust_C <<- new(textClust, r, lambda, tgap, updateAll, verbose, termFading) ## Exposed C class
+    C <<- new(textClust, as.numeric(r), as.numeric(lambda), as.integer(tgap), as.logical(verbose), as.logical(termFading)) ## Exposed C class
     .self
   }
 )
@@ -77,105 +107,79 @@ textClust_R$methods(
 #'
 #' @name textClust_R_cluster
 #'
+#' @param newdata matrix of text in a single column
+#'
 #' @author
 #' Matthias Carnein \email{matthias.carnein@@uni-muenster.de}
 #' Dennis Assenmacher \email{dennis.assenmacher@@wi.uni-muenster.de}
 #'
-#' @param newdata matrix of data with three columns (time, username, message)
+#' @importFrom tokenizers tokenize_ngrams
 NULL
 textClust_R$methods(
   cluster = function(newdata) {
 
-    textClust_C$upToDate <<- FALSE
-
-    colnames(newdata) = c("time", "user", "message")
+    C$upToDate <<- FALSE
 
     ## consider points one by one
-    apply(newdata, 1, function(x){
+    for(i in seq_len(nrow(newdata))){
 
-      if(textClust_C$verbose) print(paste("message:", x["message"]))
+      if(is.na(.self$groupByCol)){
+        id = .self$C$t ## incremental id
+      } else{
+        id = newdata[i, .self$groupByCol] ## from data
+      }
+
+      ## remove from existing cluster
+      if(!is.na(.self$groupByCol) & !is.na(.self$parentTextCol) & !is.na(.self$parentTimeCol)){
+        parent = newdata[i,.self$parentTextCol]
+        time = newdata[i,.self$parentTimeCol]
+
+        tokens = tokenize_ngrams(parent, n = nmax, n_min = nmin, lowercase=TRUE, simplify = TRUE, stopwords=.self$stopword)
+        tf = as.list(table(tokens))
+
+        .self$C$removeObservation(id, time, tf)
+      }
+
+
+      ## insert as new
+      x = newdata[i,.self$textCol]
+
+      ## if a timecolumn is specified update the field
+      if(!is.na(.self$timeCol)){
+        currenttime <<- as.character(newdata[i,.self$timeCol])
+      }
+
+      if(C$verbose) print(paste("message:", x))
 
       ## current time
       startTime = Sys.time()
 
       ## split and tokenize sentence
-      tokens = tokenize_ngrams(x["message"], n = nmax, n_min = nmin, lowercase=TRUE, simplify = TRUE)
+      tokens = tokenize_ngrams(x, n = nmax, n_min = nmin, lowercase=TRUE, simplify = TRUE, stopwords=.self$stopword)
 
       ## count term frequency
       tf = as.list(table(tokens))
 
       ## insert into closest MC
-      textClust_C$update(tf)
+      C$update(tf, id)
 
       ## getting messages per second
       difference = difftime(Sys.time(),startTime,units="secs")
-      throughput[textClust_C$t] <<- difference
-      if(textClust_C$verbose){
+      throughput[C$t] <<- difference
+      if(C$verbose){
         print(paste("Time Difference: ",difference))
         # print(paste("msg/s: ",counter))
       }
 
 
-    })
+    }
   }
 )
 
-
-#' Serialize DSC_textClust_R object
-#'
-#' Exports the C++ Object of DSC_textClust_R to an R-List
-#'
-#' @name textClust_R_serialize
-#'
-#' @author
-#' Matthias Carnein \email{matthias.carnein@@uni-muenster.de}
-#'
-NULL
-textClust_R$methods(
-  serialize = function() {
-    textClust_C$serialize()
-  }
-)
-
-
-#' Deserialize DSC_textClust_R object
-#'
-#' Imports a serialized R-List back into an C++ Object
-#'
-#' @name textClust_R_deserialize
-#'
-#' @author
-#' Matthias Carnein \email{matthias.carnein@@uni-muenster.de}
-#'
-NULL
-textClust_R$methods(
-  deserialize = function(serialized) {
-    textClust_C <<- new(textClust, serialized)
-  }
-)
-
-
-#' Calculate Inverted Document Frequency
-#'
-#' Calculates the Inverted Document Frequency, i.e. the popularity of words accross the entire corpus.
-#'
-#' @name textClust_R_calculateIDF
-#'
-#' @author
-#' Dennis Assenmacher \email{dennis.assenmacher@@wi.uni-muenster.de}
-#'
-#' @return Inverted Document Frequency as a vector
-#'
-NULL
-textClust_R$methods(
-  calculateIDF = function(clusters=.self$get_microclusters()) {
-    textClust_C$calculateIDF(clusters)
-  }
-)
 
 #' get_microclusters
 #'
-#' Getter for micro-clusters of textClust
+#' Getter for micro-clusters of textClust, returns interfaced C objects
 #'
 #' @name textClust_R_get_microclusters
 #'
@@ -187,7 +191,8 @@ textClust_R$methods(
 NULL
 textClust_R$methods(
   get_microclusters = function() {
-    textClust_C$get_microclusters()
+    clusters = .self$C$get_microclusters()
+    return(clusters)
   }
 )
 
@@ -205,10 +210,28 @@ textClust_R$methods(
 NULL
 textClust_R$methods(
   get_microweights = function() {
-    textClust_C$get_microweights()
+    weights = .self$C$get_microweights()
+    return(weights)
   }
 )
 
+
+#' get_assignment
+#'
+#' Returns the cluster assignment of text to a respective micro-clusters
+#'
+#' @name textClust_R_get_assignment
+#'
+#' @author
+#' Matthias Carnein \email{matthias.carnein@@uni-muenster.de}
+#'
+NULL
+textClust_R$methods(
+  get_assignment = function() {
+    assignment = .self$C$get_assignment()+1
+    return(assignment)
+  }
+)
 
 #' count Terms
 #'
@@ -226,7 +249,7 @@ textClust_R$methods(
     if(type=="micro") clusters = .self$get_microclusters()
     if(type=="macro") clusters = .self$get_macroclusters(merge=T)
     sum(sapply(clusters, function(x){
-      length(x$tf)
+      length(x$getTf())
     }))
   }
 )
@@ -249,7 +272,7 @@ textClust_R$methods(
 #'
 NULL
 textClust_R$methods(
-  getRepresentatives = function(num=1, type="micro"){
+  getRepresentatives = function(num=Inf, type="micro"){
 
     if(type=="micro"){
       clusters = .self$get_microclusters()
@@ -259,8 +282,10 @@ textClust_R$methods(
 
     ## for every cluster get the num entries with the heighest weight
     lapply(clusters, function(x){
-      tf = sort(unlist(x$tf))
-      tf[seq_len(min(num, length(tf)))]
+      tf = sort(unlist(x$getTf()), decreasing=T)
+      if(!is.null(num)){
+        tf[seq_len(min(num, length(tf)))]
+      }
     })
   }
 )
@@ -281,7 +306,7 @@ textClust_R$methods(
 NULL
 textClust_R$methods(
   dist = function(clusters=.self$get_microclusters()){
-    distance = textClust_C$dist(clusters)
+    distance = C$dist(clusters)
     return(stats::as.dist(distance,diag=T))
   }
 )
@@ -335,32 +360,28 @@ textClust_R$methods(
   get_macroclusters=function(merge=T,...){
 
     ## update all weights
-    textClust_C$updateWeights()
+    C$updateWeights()
 
     ## recluster
     .self$updateMacroClusters()
 
     microClusters = .self$get_microclusters()
+    microWeights = .self$get_microweights()
 
     ## group mc by cluster
-    clusters = lapply(seq_len(k), function(x){
-      microClusters[microMacroAssignment==x]
+    clusters = lapply(seq_len(max(c(0,microMacroAssignment), na.rm = T)), function(x){
+      microClusters[which(microMacroAssignment==x)]
     })
-    clusters = clusters[sapply(clusters, function(x){length(x)>0})]
+
+
     ## return as list
     if(!merge){
       return(clusters)
     }
-    ## return as merged mc
+
+    ## return as merged cluster
     lapply(clusters, function(x){
-      mc = new(MicroCluster, list(),textClust_C$t)
-      ## workaround: init with first mc to avoid empty name-strings in C
-      mc$tf = x[[1]]$tf
-      mc$weight = x[[1]]$weight
-      for(cluster in x[-1]){
-        mc$merge(cluster, textClust_C$t, textClust_C$omega, textClust_C$lambda)
-      }
-      return(mc)
+      .self$C$mergeClusters(x)
     })
   }
 )
@@ -383,17 +404,18 @@ textClust_R$methods(
   get_macroweights=function(...){
 
     ## update all weights
-    textClust_C$updateWeights()
+    C$updateWeights()
 
     ## recluster
     .self$updateMacroClusters()
 
     ## extract weights
-    weights = .self$get_microweights()
+    microClusters = .self$get_microclusters()
+    microWeights = .self$get_microweights()
 
     ## sum weights per cluster
-    sapply(seq_len(k), function(x){
-      sum(weights[microMacroAssignment==x])
+    sapply(seq_len(max(c(0,.self$microMacroAssignment), na.rm = T)), function(x){
+      sum(microWeights[which(.self$microMacroAssignment==x)])
     })
   }
 )
@@ -413,15 +435,33 @@ NULL
 textClust_R$methods(
   updateMacroClusters=function(...){
     if(is.na(k) && is.na(h)) stop("Either h or k needs to be specified to perform macro clustering.")
-    if(!textClust_C$upToDate){
-      distance = .self$dist() ## get distance matrix
-      hc <<- hclust(distance,method="single") ## hierarchical clustering
-      if(!is.na(k)){
-        microMacroAssignment <<- cutree(hc, k = min(k,length(textClust_C$get_microclusters())))
+    if(!C$upToDate){
+
+      microClusters = .self$get_microclusters()
+      microWeights = .self$get_microweights()
+      microMacroAssignment <<- rep(NA_integer_, length(microClusters))
+
+      ## filter by minWeight
+      select = which(microWeights >= .self$minWeight)
+      microClusters = microClusters[select]
+      microWeights = microWeights[select]
+
+      if(length(microClusters)>=2){
+        distance = .self$dist(microClusters) ## get distance matrix
+        if(.self$weightedReclustering){
+          hc <<- hclust(distance,method=.self$linkage, members=microWeights) ## hierarchical clustering with weights
+        } else{
+          hc <<- hclust(distance,method=.self$linkage) ## hierarchical clustering without weights
+        }
+        if(!is.na(k)){
+          microMacroAssignment[select] <<- cutree(hc, k = min(k,length(microClusters)))
+        } else{
+          microMacroAssignment[select] <<- cutree(hc, h = h)
+        }
       } else{
-        microMacroAssignment <<- cutree(hc, h = h)
+        microMacroAssignment[select] <<- seq_along(microClusters)
       }
-      textClust_C$upToDate <<- TRUE
+      C$upToDate <<- TRUE
     }
   }
 )
@@ -439,24 +479,24 @@ textClust_R$methods(
 #'
 NULL
 textClust_R$methods(
-    getThroughputPerSecond = function(){
-      res = numeric()
-      sum = 0
-      messages = 0
-      j = 1
-      for(i in 1:length(.self$throughput)){
-        sum = sum + .self$throughput[i]
-        messages = messages+1
-        if(sum>1){
-          res[j] = messages
-          j = j+1
-          messages = 0
-          sum = 0
-        }
+  getThroughputPerSecond = function(){
+    res = numeric()
+    sum = 0
+    messages = 0
+    j = 1
+    for(i in 1:length(.self$throughput)){
+      sum = sum + .self$throughput[i]
+      messages = messages+1
+      if(sum>1){
+        res[j] = messages
+        j = j+1
+        messages = 0
+        sum = 0
       }
-      return(data.frame(time=seq_along(res),throughput=res))
     }
-  )
+    return(data.frame(time=seq_along(res),throughput=res))
+  }
+)
 
 
 #' Seconds per messages
@@ -481,3 +521,9 @@ textClust_R$methods(
     }))
   }
 )
+
+
+
+
+
+

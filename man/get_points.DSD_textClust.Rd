@@ -4,7 +4,7 @@
 \alias{get_points.DSD_textClust}
 \title{Get Points from textClust source}
 \usage{
-get_points.DSD_textClust(x, n = 1, cluster = FALSE, ...)
+\method{get_points}{DSD_textClust}(x, n = 1, cluster = FALSE, ...)
 }
 \arguments{
 \item{x}{\code{DSD_textClust} object to read the points from}

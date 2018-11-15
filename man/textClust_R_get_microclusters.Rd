@@ -7,7 +7,7 @@
 list of micro-clusters
 }
 \description{
-Getter for micro-clusters of textClust
+Getter for micro-clusters of textClust, returns interfaced C objects
 }
 \author{
 Matthias Carnein \email{matthias.carnein@uni-muenster.de}

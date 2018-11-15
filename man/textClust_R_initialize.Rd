@@ -14,8 +14,6 @@
 
 \item{nmax}{max number of ngrams to use}
 
-\item{updateAll}{logical whether a new observations is used to update all micro-clusters within \code{r} or just the closest.}
-
 \item{k}{number of clusters}
 
 \item{h}{height for hierarchical clustering}
@@ -23,9 +21,21 @@
 \item{verbose}{logical whether to be more verbose}
 
 \item{termFading}{logical whether individual terms should be faded}
+
+\item{stopword}{chracter vector of stopwords to remove}
+
+\item{linkage}{method for hierarchical clustering}
+
+\item{weightedReclustering}{logical whether reclustering should consider cluster weights}
+
+\item{minWeight}{minimum weight of micro clusters to be used for reclustering}
+
+\item{textCol}{index of column that contains the text which should be clustered}
+
+\item{timeCol}{index of column that contains timestamps}
 }
 \value{
-refernce class object
+reference class object
 }
 \description{
 Constructor of textClust

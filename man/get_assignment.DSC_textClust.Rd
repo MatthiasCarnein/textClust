@@ -4,12 +4,14 @@
 \alias{get_assignment.DSC_textClust}
 \title{Get Assignment for DSC_textClust}
 \usage{
-get_assignment.DSC_textClust(dsc, points, ...)
+\method{get_assignment}{DSC_textClust}(dsc, points)
 }
 \arguments{
 \item{dsc}{object of class DSC_textClust}
 
 \item{points}{matrix with the messages to assign}
+
+\item{...}{optional arguments are ignored}
 }
 \value{
 Indicies of the closest micro-clusters
@@ -18,11 +20,12 @@ Indicies of the closest micro-clusters
 Returns the index of the closest micro-cluster for every entry in points using the cosine similary of the tf-idf vectors.
 }
 \examples{
-stream = DSD_ReadCSV("file.txt", sep = "\\t", comment.char="", quote="")
-algorithm = DSC_textClust(lambda=0.001, r=0.2, tgap=100, verbose=T)
-update(algorithm, stream, n=100)
+data = data.frame(text=sample(c("Main Topic", "Similar Topic", "Something Different"), size=1000, replace=T),stringsAsFactors=F)
+stream = DSD_Memory(data)  ## Alternatively: stream = DSD_ReadCSV("file.txt", sep = "\\t", comment.char="", quote="")
+algorithm = DSC_textClust(r=.4, lambda=0.1, tgap=100, nmin=1, nmax=2, k=3, stopword=c(), minWeight=3, textCol=1)
+update(algorithm, stream, n=1000)
 
-data = read.table("file.txt", header=F, sep="\\t", quote="", comment.char = "", stringsAsFactors =F)
+data = data.frame(text=sample(c("Main Topic", "Something Different"), size=100, replace=T),stringsAsFactors=F)
 get_assignment(algorithm, data)
 
 }

@@ -4,9 +4,13 @@
 \alias{DSC_textClust}
 \title{textClust}
 \usage{
-DSC_textClust(r = 0.4, lambda = 0.1, tgap = 1000, nmin = 1, nmax = 1,
-  updateAll = F, k = NA_integer_, h = NA_real_, verbose = F,
-  termFading = T)
+DSC_textClust(r = 0.4, lambda = 0.1, tgap = 1000, nmin = 1,
+  nmax = 1, k = NA_integer_, h = NA_real_, verbose = F,
+  termFading = T, stopword = stopwords(language = "en", source =
+  "stopwords-iso"), linkage = "complete", weightedReclustering = TRUE,
+  minWeight = 2, textCol = 1, timeCol = NA_integer_,
+  groupByCol = NA_integer_, parentTextCol = NA_integer_,
+  parentTimeCol = NA_integer_)
 }
 \arguments{
 \item{r}{distance threshold to merge two micro-clusters}
@@ -19,8 +23,6 @@ DSC_textClust(r = 0.4, lambda = 0.1, tgap = 1000, nmin = 1, nmax = 1,
 
 \item{nmax}{max number of ngrams to use}
 
-\item{updateAll}{logical whether a new observations is used to update all micro-clusters within \code{r} or just the closest.}
-
 \item{k}{number of clusters for macro-clustering}
 
 \item{h}{height to determine number of clusters for macro-clustering}
@@ -28,17 +30,36 @@ DSC_textClust(r = 0.4, lambda = 0.1, tgap = 1000, nmin = 1, nmax = 1,
 \item{verbose}{logical whether to be more verbose}
 
 \item{termFading}{logical whether individual terms should also be faded}
+
+\item{stopword}{chracter vector of stopwords to remove}
+
+\item{linkage}{method for hierarchical clustering}
+
+\item{weightedReclustering}{logical whether reclustering should consider cluster weights}
+
+\item{minWeight}{minimum weight of micro clusters to be used for reclustering}
+
+\item{textCol}{index of column that contains the text which should be clustered}
+
+\item{timeCol}{index of column that contains timestamps}
+
+\item{groupByCol}{index of column that groups text into conversations (i.e. multiple texts into the same document)}
+
+\item{parentTextCol}{index of column that contains the text of the parent when using groupByCol}
+
+\item{parentTimeCol}{index of column that contains the time of the parent when using groupByCol}
 }
 \value{
 micro clusters
 }
 \description{
-Stream Clustering algorithm which clusters messages. Contains a description string as well as a reference class object of \code{textClust} which is the work-horse.
+Stream Clustering algorithm which clusters text data.
 }
 \examples{
-stream = DSD_ReadCSV("file.txt", sep = "\\t", comment.char="", quote="")
-textClust <- DSC_textClust(r=.75, lambda=.1, tgap=1000)
-update(textClust, stream, n=100)
+data = data.frame(text=sample(c("Main Topic", "Similar Topic", "Something Different"), size=1000, replace=T),stringsAsFactors=F)
+stream = DSD_Memory(data)  ## Alternatively: stream = DSD_ReadCSV("file.txt", sep = "\\t", comment.char="", quote="")
+algorithm = DSC_textClust(r=.4, lambda=0.1, tgap=100, nmin=1, nmax=2, k=3, stopword=c(), minWeight=3, textCol=1)
+update(algorithm, stream, n=1000)
 
 }
 \references{

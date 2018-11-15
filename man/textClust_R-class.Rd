@@ -11,7 +11,7 @@ Maintains the current clustering and implements the stream package interfaces.
 \section{Fields}{
 
 \describe{
-\item{\code{textClust_C}}{Exposed C++ class}
+\item{\code{C}}{Exposed C++ class}
 
 \item{\code{nmin}}{min number of ngrams to use}
 
@@ -21,15 +21,23 @@ Maintains the current clustering and implements the stream package interfaces.
 
 \item{\code{h}}{height for hierarchical clustering}
 
-\item{\code{upToDate}}{logical whether macro-clusters are up to date or need to be recomputed}
-
 \item{\code{microMacroAssignment}}{assignment vector associating micro-clusters to a maco-cluster}
-
-\item{\code{hc}}{hclust object}
 
 \item{\code{throughput}}{stores the throughput of messages}
 
 \item{\code{termFading}}{logical whether individual terms should be faded}
+
+\item{\code{stopword}}{chracter vector of stopwords to remove}
+
+\item{\code{linkage}}{method for hierarchical clustering}
+
+\item{\code{weightedReclustering}}{logical whether reclustering should consider cluster weights}
+
+\item{\code{minWeight}}{minimum weight of micro clusters to be used for reclustering}
+
+\item{\code{textCol}}{index of column that contains the text}
+
+\item{\code{timeCol}}{index of column that contains the timestamps}
 }}
 
 

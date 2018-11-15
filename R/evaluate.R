@@ -78,7 +78,12 @@
 .all_measures <- c(.eval_measures_int, .eval_measures_ext,
     .eval_measures_fpc_int, .eval_measures_fpc_ext)
 
+#' Evaluate Clustering
+#'
+#' Adaption of evaluation method from the stream pacakge. Adapted for textual data.
+#'
 #' @export
+#' @importFrom fpc cluster.stats
 evaluate <- function (dsc, dsd, measure, n = 100,
   type=c("auto", "micro", "macro"),
   assign="micro",
@@ -208,6 +213,11 @@ print.stream_eval <-  function(x, ...) {
 
 ## evaluate during clustering
 ## uses single-fold prequential error estimate (eval and then learn the data)
+
+#' Evaluate Clustering Using Prequential Evaluation
+#'
+#' Adaption of evaluate_cluster method from the stream pacakge.
+#'
 #' @export
 evaluate_cluster <- function(dsc, dsd, measure,
   n=1000, type=c("auto", "micro", "macro"), assign="micro",
@@ -223,7 +233,7 @@ evaluate_cluster <- function(dsc, dsd, measure,
   for(i in 1:rounds) {
     if(verbose) print(paste("Round", i, "of", rounds))
     # serialized=dsc$RObj$serialize()
-    # save(dsc, serialized, file=paste("debug/debug", dsc$RObj$textClust_C$t, ".RData", sep=""))
+    # save(dsc, serialized, file=paste("debug/debug", dsc$RObj$C$t, ".RData", sep=""))
     d <- DSD_Memory(dsd, n=horizon, loop=FALSE)
 
     ## evaluate first
@@ -412,19 +422,17 @@ ssq <- function(points, actual, predict, dsc, centers) {
   ## do nn assignment of non noise points
   if(!is.null(actual)) points <- points[actual != 0L,]
 
-  colnames(points) = c("time", "user", "message")
-
   ## get mcs
-  microClusters = get_centers(dsc)
+  microClusters = dsc$RObj$C$get_microclusters()
 
   ## get idf
-  currentIDF = dsc$RObj$calculateIDF()
+  currentIDF = dsc$RObj$C$precalculateIDF(microClusters)
 
   ## for every row
   assign_dist = apply(points, 1, function(x){
 
     ## split and tokenize sentence
-    tokens = tokenize_ngrams(x["message"], n = dsc$RObj$nmax, n_min = dsc$RObj$nmin, lowercase=TRUE, simplify = TRUE)
+    tokens = tokenize_ngrams(x, n = dsc$RObj$nmax, n_min = dsc$RObj$nmin, lowercase=TRUE, simplify = TRUE)
 
     ## count term frequency
     tf = as.list(table(tokens))
@@ -433,11 +441,11 @@ ssq <- function(points, actual, predict, dsc, centers) {
       return(NA)
     }
 
-    dist = dsc$RObj$textClust_C$findClosestDist(tf, currentIDF, centers)
+    dist = dsc$RObj$C$findClosestDist(tf, centers, currentIDF)
 
     # print(dist)
     # ## create temporary mc from text and timestamp
-    # microCluster = new(MicroCluster, tf, dsc$RObj$textClust_C$t)
+    # microCluster = new(MicroCluster, tf, dsc$RObj$C$t)
     #
     # ## calc dists to all other mcs
     # dist = sapply(microClusters, function(mc){
@@ -458,15 +466,14 @@ silhouette <- function(points, actual, predict, dsc) {
   predict <- predict[!noise]
 
 #  if(any(predict==0)) warning("silhouette: ", sum(predict==0), " non-noise points were predicted noise incorrectly and form their own cluster.")
-  colnames(points) = c("time", "user", "message")
 
   clusters = apply(points, 1, function(x){
-    tokens = tokenize_ngrams(x["message"], n = dsc$RObj$nmax, n_min = dsc$RObj$nmin, lowercase=TRUE, simplify = TRUE)
+    tokens = tokenize_ngrams(x, n = dsc$RObj$nmax, n_min = dsc$RObj$nmin, lowercase=TRUE, simplify = TRUE)
     ## count term frequency
     tf = as.list(table(tokens))
     if(length(tf)==0) return(NA)
     ## create temporary mc from text and timestamp
-    new(MicroCluster, tf, dsc$RObj$textClust_C$t)
+    new(MicroCluster, tf, dsc$RObj$C$t)
   })
 
   predict = predict[!is.na(clusters)]
@@ -485,6 +492,7 @@ silhouette <- function(points, actual, predict, dsc) {
   mean(cluster::silhouette(predict, d)[,"sil_width"])
 }
 
+#' @importFrom clue as.cl_hard_partition
 clue_agreement <- function(predict, actual, measure) {
   predict <- clue::as.cl_hard_partition(predict)
   actual <- clue::as.cl_hard_partition(actual)

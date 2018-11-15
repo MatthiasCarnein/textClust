@@ -4,9 +4,9 @@
 \name{textClust}
 \alias{textClust}
 \alias{textClust-package}
-\title{Text Stream Clustering}
+\title{Topic Discovery in Texts using Stream Clustering}
 \description{
-Text Stream Clustering
+Topic Discovery in Texts using Stream Clustering
 }
 \references{
 Matthias Carnein, Dennis Assenmacher, Heike Trautmann (2017)"Stream Clustering of Chat Messages with Applications to Twitch Streams". In: Advances in Conceptual Modeling. ER 2017. Lecture Notes in Computer Science, vol 10651. Springer, Cham

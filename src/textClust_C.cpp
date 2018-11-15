@@ -1,5 +1,7 @@
 #include <Rcpp.h>
 #include "microCluster.hpp"
+#include <unordered_map>
+
 
 using namespace Rcpp;
 
@@ -9,136 +11,104 @@ public:
   double r;
   double lambda;
   int tgap;
-  bool updateAll;
   bool verbose;
   double omega;
   int t;
   bool upToDate;
+  bool upToDateWeights;
   bool termFading;
-  Rcpp::List micro;
+  std::vector<MicroCluster*> micro;
+  std::map<int, int> assignment;
 
 
-  textClust(double r, double lambda, int tgap, bool updateAll, bool verbose, bool termFading){
+  textClust(double r, double lambda, int tgap, bool verbose, bool termFading){
     this->r = r;
     this->lambda = lambda;
     this->tgap = tgap;
-    this->updateAll = updateAll;
     this->verbose = verbose;
     this->omega = 0;
     if(lambda!=0) this->omega = pow(2, (-1*lambda * tgap));
     this->t = 0;
     this->upToDate=1;
+    this->upToDateWeights=1;
     this->termFading = termFading;
   };
 
-  textClust(Rcpp::List serialized) {
 
-    // reconstruct micro clusters
-    Rcpp::List tfs = serialized["micro_tfs"];
-    Rcpp::IntegerVector times = serialized["micro_times"];
-    Rcpp::NumericVector weights = serialized["micro_weights"];
+  void removeObservation(int id, int time, Rcpp::List parent){
 
-    for(int i=0; i<tfs.size(); i++){
-      MicroCluster mc(tfs[i], times[i], weights[i]);
-      micro.push_back(mc);
+    std::map<int,int>::iterator it = this->assignment.find(id);
+
+    // if we have previously processed the parent
+    if(it != this->assignment.end()){
+
+      // remove from existing cluster
+      MicroCluster* mc = new MicroCluster(parent, time, 1);
+
+      int i = this->assignment[id];
+
+      if(verbose) std::cout << "Remove observation " << time <<" from Micro Cluster " << i << std::endl;
+      this->micro[i]->unmerge(mc, this->t, this->omega, this->lambda, this->termFading);
+
+      // remove if insufficient weight or empty
+      if(this->micro[i]->weight <= this->omega || this->micro[i]->tf.size()==0){
+        if(verbose) std::cout << "Remove cluster " << i << std::endl;
+
+        delete this->micro[i];
+        this->micro.erase(this->micro.begin()+i); // remove cluster
+
+        for (std::map<int, int>::iterator it = this->assignment.begin(); it != this->assignment.end(); it++ ){
+          if(it->second == i) it->second = NA_INTEGER; // remove cluster assignment
+          if(it->second > i) it->second--; // due to removed cluster
+        }
+      }
+      delete mc;
     }
-
-    // reconstruct parameters
-    r = serialized["r"];
-    lambda = serialized["lambda"];
-    tgap = serialized["tgap"];
-    updateAll = serialized["updateAll"];
-    verbose = serialized["verbose"];
-    omega = serialized["omega"];
-    t = serialized["t"];
-    upToDate = serialized["upToDate"];
-    termFading = serialized["termFading"];
-  };
-
-
-  Rcpp::List serialize(){
-
-    // decompose micro clusters
-    Rcpp::List tfs(micro.size());
-    Rcpp::IntegerVector times(micro.size());
-    Rcpp::NumericVector weights(micro.size());
-
-    for(unsigned int i=0; i<micro.size(); i++){
-      tfs[i] = static_cast <MicroCluster>(micro[i]).tf;
-      weights[i] = static_cast <MicroCluster>(micro[i]).weight;
-      times[i] = static_cast <MicroCluster>(micro[i]).time;
-    }
-
-    return Rcpp::List::create(
-      Rcpp::Named("r") = r,
-      Rcpp::Named("lambda") = lambda,
-      Rcpp::Named("tgap") = tgap,
-      Rcpp::Named("updateAll") = updateAll,
-      Rcpp::Named("verbose") = verbose,
-      Rcpp::Named("omega") = omega,
-      Rcpp::Named("t") = t,
-      Rcpp::Named("upToDate") = upToDate,
-      Rcpp::Named("termFading") = termFading,
-      Rcpp::Named("micro_tfs") = tfs,
-      Rcpp::Named("micro_times") = times,
-      Rcpp::Named("micro_weights") = weights
-    );
   }
 
 
-  void update(Rcpp::List x){
+  void update(Rcpp::List x, int id){
 
     // increment time
     this->t++;
+    this->upToDateWeights=0;
+
+    if(t%100 == 0) std::cout << t << std::endl;
 
     // if message contains tokens
     if(x.size()){
 
       // create temporary mc from text and timestamp
-      MicroCluster mc(x, this->t);
+      MicroCluster* mc = new MicroCluster(x, this->t, 1);
 
       // Calculate IDF
-      Rcpp::List idf = this->calculateIDF(this->get_microclusters());
+      std::unordered_map<std::string, double> idf = this->calculateIDF(this->micro);
 
-      if(!updateAll){
-        // only update closest mc
-        int j = -1;
-        double dist = this->r;
-        // find closest mc within r
-        for(unsigned int i=0; i < micro.size(); i++){
-          double d = mc.distance(this->micro[i], idf);
-          if(d <= dist){
-            dist = d;
-            j=i;
-          }
-        }
-        if(j != -1){
-          if(verbose) std::cout << "Merge observation " << this->t << " into Micro Cluster " << j  << std::endl;
-          MicroCluster* microj = this->micro[j];
-          microj->merge(mc, this->t, this->omega, this->lambda);
-        } else{
-          if(verbose) std::cout << "Use observation " << this->t <<" to create new Micro Cluster" << std::endl;
-          this->micro.push_back(mc);
-        }
-      } else{
-        // update all within r
-        int merged=0;
-        for(unsigned int i=0; i < micro.size(); i++){
-          double d = mc.distance(this->micro[i], idf);
-          if(d <= this->r){
-            if(verbose) std::cout << "Merge observation " << this->t << " into Micro Cluster " << i  << std::endl;
-            MicroCluster* microi = this->micro[i];
-            microi->merge(mc, this->t, this->omega, this->lambda);
-            merged=1;
-          }
-        }
-        if(!merged){
-          if(verbose) std::cout << "Use observation " << this->t <<" to create new Micro Cluster" << std::endl;
-          this->micro.push_back(mc);
+      // only update closest mc
+      int j = -1;
+      double dist = this->r;
+      // find closest mc within r
+      for(unsigned int i=0; i < this->micro.size(); i++){
+        double d = mc->distance(this->micro[i], idf);
+        if(d <= dist){
+          dist = d;
+          j=i;
         }
       }
-    } else if(verbose){
-      std::cout << "Observation " << this->t <<" does not contain any token." << std::endl;
+      if(j != -1){
+        if(verbose) std::cout << "Merge observation " << this->t << " into Micro Cluster " << j << " at distance " << dist << std::endl;
+        this->micro[j]->merge(mc, this->t, this->omega, this->lambda, this->termFading);
+        delete mc;
+        this->assignment[id]=j;
+      } else{
+        if(verbose) std::cout << "Use observation " << this->t <<" to create new Micro Cluster " << this->micro.size() << std::endl;
+        this->micro.push_back(mc);
+        this->assignment[id]=this->micro.size()-1;
+      }
+
+    } else{
+      this->assignment[id]=NA_INTEGER;
+      if(verbose) std::cout << "Observation " << this->t << " does not contain any token." << std::endl;
     }
 
     // remove outlier every tgap
@@ -148,37 +118,62 @@ public:
   }
 
 
-  Rcpp::List get_microclusters(){
-    // Rcpp::List result(this->micro.size());
-    // for(unsigned int i=0; i<this->micro.size();i++){
-    //   result[i] = this->micro[i];
-    // }
-    return(micro);
+  std::vector<MicroCluster> get_microclusters(){
+    if(!this->upToDateWeights) this->updateWeights();
+    std::vector<MicroCluster> result;
+    result.reserve(this->micro.size());
+    for(unsigned int i=0; i<this->micro.size(); i++){
+      MicroCluster tmp = *(this->micro[i]);
+      result.push_back(tmp);
+    }
+    return result;
   }
 
 
   Rcpp::NumericVector get_microweights(){
+    if(!this->upToDateWeights) this->updateWeights();
     Rcpp::NumericVector weights(this->micro.size());
     for(unsigned int i=0; i<this->micro.size(); i++){
-      MicroCluster* microi = this->micro[i];
-      weights[i] = microi->weight;
+      weights[i] = this->micro[i]->weight;
     }
     return(weights);
   }
 
+  Rcpp::IntegerVector get_assignment(){
+
+    Rcpp::IntegerVector mapResult(this->assignment.size());
+    Rcpp::CharacterVector mapResultNames(this->assignment.size());
+    int i=0;
+    for (std::map<int, int>::iterator it = this->assignment.begin(); it != this->assignment.end(); it++ ){
+      mapResult[i] = it->second;
+      mapResultNames[i] = it->first;
+      i++;
+    }
+    mapResult.attr("names") = mapResultNames;
+    return mapResult;
+  }
+
+
 
   Rcpp::NumericMatrix dist(Rcpp::List clusters){
+
+    // convert R stucture to internal representation
+    std::vector<MicroCluster*> clustersPtr;
+    clustersPtr.reserve(clusters.size());
+    for(int i=0; i<clusters.size(); i++){
+      clustersPtr.push_back(clusters[i]); // this implicitly casts to a pointer
+    }
+
     // calcualte pairwise distances bewteen all mcs
-    int numMicro = clusters.size();
-    Rcpp::NumericMatrix distance(numMicro, numMicro);
-    Rcpp::List idf = this->calculateIDF(clusters);
+    Rcpp::NumericMatrix distance(clusters.size(), clusters.size());
+    std::unordered_map<std::string, double> idf = this->calculateIDF(clustersPtr);
+
     for(int i=0; i<distance.nrow(); i++){
       for(int j=i+1; j<distance.ncol(); j++){
         if(i==j){
           distance(i,j)=0; // avoid floating point precision on diagonal
         } else{
-          MicroCluster* microi = clusters[i];
-          double d = microi->distance(clusters[j], idf);
+          double d = clustersPtr[i]->distance(clustersPtr[j], idf);
           distance(i,j) = d; // lower part
           distance(j,i) = d; // upper part
         }
@@ -191,48 +186,78 @@ public:
 
     // fade Clusters
     for(int i=micro.size()-1; i>=0; i--){
-      MicroCluster* microi = this->micro[i];
-      microi->fade(this->t, this->omega, this->lambda, this->termFading);
+      this->micro[i]->fade(this->t, this->omega, this->lambda, this->termFading);
       // remove insufficient weight or empty clusters
-      if(microi->weight <= this->omega || microi->tf.size()==0){
-        this->micro.erase(i);
-      }
-    }
-  }
+      if(this->micro[i]->weight <= this->omega || this->micro[i]->tf.size()==0){
+        if(verbose) std::cout << "Remove cluster " << i << std::endl;
 
-  Rcpp::List calculateIDF(Rcpp::List clusters){
+        delete this->micro[i];
+        this->micro.erase(this->micro.begin()+i); // remove cluster
 
-    // calculate the IDF for all mcs
-    Rcpp::List result;
-    // iterate over all micro clusters
-    for(unsigned int i=0; i<clusters.size(); i++){
-      MicroCluster* microi = clusters[i];
-      Rcpp::CharacterVector keys = microi->tf.names();
-      for(int j=0; j<keys.size(); j++){
-        std::string key; // init first to help compiler
-        key = keys[j];
-        if(result.containsElementNamed(keys[j])){
-          double temp = result[key]; // help compiler
-          result[key] = temp+1;
-        } else{
-          result[key] = 1;
+        for (std::map<int, int>::iterator it = this->assignment.begin(); it != this->assignment.end(); it++ ){
+          if(it->second == i) it->second = NA_INTEGER; // remove cluster assignment
+          if(it->second > i) it->second--; // due to removed cluster
         }
       }
     }
-    // We take 1+log.. because otherwise single documents would always be zero
-    // TODO can we just add +1?
-    for(int i=0; i<result.size(); i++){
-      double res = result[i];
-      result[i] = 1+log(clusters.size()/res);
+    this->upToDateWeights=1;
+  }
+
+  SEXP precalculateIDF(Rcpp::List clusters){
+
+    // convert R stucture to internal representation
+    std::vector<MicroCluster*> clustersPtr;
+    clustersPtr.reserve(clusters.size());
+    for(int i=0; i<clusters.size(); i++){
+      clustersPtr.push_back(clusters[i]); // this implicitly casts to a pointer
     }
+
+    std::unordered_map<std::string, double> idf = this->calculateIDF(clustersPtr);
+    std::unordered_map<std::string, double>* idf2 = new std::unordered_map<std::string, double>(idf);
+
+    return Rcpp::XPtr<std::unordered_map<std::string, double> >(idf2);
+  }
+
+
+
+  std::unordered_map<std::string, double> calculateIDF(std::vector<MicroCluster*> clusters){
+
+    std::unordered_map<std::string, double> result;
+
+    // iterate all micro clusters
+    for(unsigned int i=0; i<clusters.size(); i++){
+      // iterate tokens
+      for (std::unordered_map<std::string, double>::iterator it = clusters[i]->tf.begin(); it != clusters[i]->tf.end(); it++ ){
+
+        // check if token already exists
+        std::unordered_map<std::string, double>::iterator resultIt = result.find(it->first);
+        if(resultIt != result.end()){
+          resultIt->second += 1;
+        } else{
+          result[it->first] = 1;
+        }
+      }
+    }
+
+    // total document / documents with term
+    // We also take 1+log.. because otherwise single documents would always be zero
+    for (std::unordered_map<std::string, double>::iterator it = result.begin(); it != result.end(); it++ ){
+      it->second = 1+log(clusters.size()/it->second);
+    }
+
     return(result);
   }
 
 
-  int findClosestMC(Rcpp::List tf, Rcpp::List idf){
+  int findClosestMC(Rcpp::List tf, SEXP idfPtr){
+
+    Rcpp::XPtr<std::unordered_map<std::string, double> > temp(idfPtr);
+    std::unordered_map<std::string, double> idf = *temp;
+
+
 
     // create temporary mc from text and timestamp
-    MicroCluster mc(tf, this->t);
+    MicroCluster mc(tf, this->t, 1);
 
     // find cloest mc
     double dist=1;
@@ -247,15 +272,26 @@ public:
     return(j); // C indexing
   }
 
-  double findClosestDist(Rcpp::List tf, Rcpp::List idf, Rcpp::List centers){
+  double findClosestDist(Rcpp::List tf, Rcpp::List clusters, SEXP idfPtr){
+
+
+    // convert R stucture to internal representation
+    std::vector<MicroCluster*> clustersPtr;
+    clustersPtr.reserve(clusters.size());
+    for(int i=0; i<clusters.size(); i++){
+      clustersPtr.push_back(clusters[i]); // this implicitly casts to a pointer
+    }
+
+    Rcpp::XPtr<std::unordered_map<std::string, double> > temp(idfPtr);
+    std::unordered_map<std::string, double> idf = *temp;
 
     // create temporary mc from text and timestamp
-    MicroCluster mc(tf, this->t);
+    MicroCluster mc(tf, this->t, 1);
 
     // find cloest mc
     double dist=1.0;
-    for(unsigned int i=0; i<centers.size(); i++){
-      double d = mc.distance(centers[i], idf);
+    for(unsigned int i=0; i<clustersPtr.size(); i++){
+      double d = mc.distance(clustersPtr[i], idf);
       if(d <= dist){
         dist = d;
       }
@@ -264,6 +300,34 @@ public:
   }
 
 
+  MicroCluster mergeClusters(Rcpp::List clusters){
+
+    MicroCluster mc = clusters[0]; // init with first
+    for(int i=1; i<clusters.size(); i++){
+      mc.merge(clusters[i], this->t, this->omega, this->lambda, this->termFading); // this implicitly casts clusters[i] to a pointer
+    }
+    return(mc);
+  }
+
+
+  Rcpp::List get_globalWeight(std::string token){
+    Rcpp::List result;
+
+    for(unsigned int i=0; i<this->micro.size(); i++){
+      MicroCluster tmp = *(this->micro[i]);
+      std::unordered_map<std::string, double> tf = tmp.tf;
+
+      double sum = 0;
+
+      // check if token already exists
+      std::unordered_map<std::string, double>::iterator it = tf.find(token);
+      if(it != tf.end()){
+        sum += it->second;
+      }
+      result[token] = sum;
+    }
+    return(result);
+  }
 
 private:
 
@@ -272,19 +336,25 @@ private:
     if(this->verbose) std::cout << "Cleanup" << std::endl;
     this->updateWeights();
 
-    Rcpp::List idf = this->calculateIDF(this->get_microclusters());
+    std::unordered_map<std::string, double> idf = this->calculateIDF(this->micro);
     // for every mc
     unsigned int i=0;
     while(i<micro.size()){
       // for every following mc
       unsigned int j=i+1;
       while(j < micro.size()){
-        MicroCluster* microi = this->micro[i];
-        double d = microi->distance(this->micro[j], idf); // calc distance
+        double d = this->micro[i]->distance(this->micro[j], idf); // calc distance
         if(d <= r){
           if(this->verbose) std::cout << "Merging " << j << " into " << i << std::endl;
-          microi->merge(this->micro[j], this->t, this->omega, this->lambda); //merge mc into the other
-          this->micro.erase(j); // remove the old mc
+          this->micro[i]->merge(this->micro[j], this->t, this->omega, this->lambda, this->termFading); //merge mc into the other
+          delete this->micro[j];
+          this->micro.erase(this->micro.begin()+j); // remove the old mc
+
+          // update cluster assignment
+          for (std::map<int, int>::iterator it = this->assignment.begin(); it != this->assignment.end(); it++ ){
+            if(it->second == (int)j) it->second = (int)i; // update cluster assignment
+            if(it->second > (int)j) it->second--; // due to removed cluster
+          }
         } else{
           j++; // if none was removed, move to next
         }
@@ -306,38 +376,39 @@ RCPP_EXPOSED_CLASS(MicroCluster)
     using namespace Rcpp;
 
     class_<textClust>("textClust")
-      .constructor<double, double, int, bool, bool,bool>()
-      .constructor<Rcpp::List>()
+      .constructor<double, double, int, bool,bool>()
+    // .constructor<Rcpp::List>()
 
     .field("r", &textClust::r)
     .field("lambda", &textClust::lambda)
     .field("tgap", &textClust::tgap)
-    .field("updateAll", &textClust::updateAll)
     .field("verbose", &textClust::verbose)
     .field("omega", &textClust::omega)
     .field("t", &textClust::t)
     .field("upToDate", &textClust::upToDate)
     .field("termFading", &textClust::termFading)
-    .field("micro", &textClust::micro)
+    // .field("micro", &textClust::micro)
+    // .field("assignment", &textClust::assignment)
 
     .method("update", &textClust::update)
     .method("get_microclusters", &textClust::get_microclusters)
     .method("get_microweights", &textClust::get_microweights)
     .method("dist", &textClust::dist)
     .method("updateWeights", &textClust::updateWeights)
-    .method("calculateIDF", &textClust::calculateIDF)
     .method("findClosestMC", &textClust::findClosestMC)
     .method("findClosestDist", &textClust::findClosestDist)
-    .method("serialize", &textClust::serialize)
+    .method("mergeClusters", &textClust::mergeClusters)
+    .method("precalculateIDF", &textClust::precalculateIDF)
+    .method("get_assignment", &textClust::get_assignment)
+    .method("removeObservation", &textClust::removeObservation)
     ;
 
     class_<MicroCluster>("MicroCluster")
-      .constructor<Rcpp::List, int>()
-      .field("tf", &MicroCluster::tf)
+      .constructor<Rcpp::List, int, double>()
       .field("time", &MicroCluster::time)
       .field("weight", &MicroCluster::weight)
       .method("merge", &MicroCluster::merge)
-      .method("distance",&MicroCluster::distance)
+      .method("getTf",&MicroCluster::getTf)
     ;
 
   }

@@ -4,9 +4,11 @@
 \alias{print.DSC_textClust}
 \title{Print DSC_textClust}
 \usage{
-\method{print}{DSC_textClust}(dsc)
+\method{print}{DSC_textClust}(x, ...)
 }
 \arguments{
+\item{...}{optional arguments are ignored}
+
 \item{dsc}{object of class DSC_textClust}
 }
 \description{
