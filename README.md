@@ -1,6 +1,6 @@
 # textClust
 
-This R package implements an algorithm to cluster text streams as proposed in our paper:
+This R package implements an algorithm for topic discovery by clustering text streams as proposed in our paper:
 
 > Carnein M., Assenmacher D. and Trautmann H. (2017), "Stream Clustering of Chat Messages with Applications to Twitch Streams", In Advances in Conceptual Modeling: ER 2017 Workshops AHA, MoBiD, MREBA, OntoCom, and QMMQ, Valencia, Spain, November 6--9, 2017, Proceedings. , pp. 79-88. Springer International Publishing.
 
@@ -24,36 +24,36 @@ Alternatively, the package can be build from source.
 Usage and interfaces are largely based on the R-package [stream](https://github.com/mhahsler/stream) with modifications for the analysis of text data
 
 ```R
-## read text-stream from file
-stream = DSD_ReadCSV("file.txt", sep = "\t", comment.char="", quote="")
+library(textClust)
+library(stream)
+
+## define data stream
+data = data.frame(text=sample(c("Main Topic", "Similar Topic", "Something Different"), size=1000, replace=T),stringsAsFactors=F)
+stream = DSD_Memory(data) 
+
+# Alternatively read data from file:
+# stream = DSD_ReadCSV("file.txt", sep = "\t", comment.char="", quote="")
 
 ## define text clustering algorithm
-algorithm = DSC_textClust(r=.5, lambda=0.5, tgap=100, updateAll = F, nmin=1, nmax=1, k=10, verbose=F)
+algorithm = DSC_textClust(r=.4, lambda=0.1, tgap=100, nmin=1, nmax=2, k=3, stopword=c(), minWeight=3, textCol=1)
 
 ## run the algorithm
 update(algorithm, stream, n=1000)
 
-## plot the resulting micro-clusters using multi-dimensional scaling (MDS)
-plot(algorithm, numRepresentatives = 2, type = "micro")
+## get micro clusters
+get_centers(algorithm, "micro")
 
-## or plot the final clusters
-plot(algorithm, numRepresentatives = 2, type = "macro")
+## get macro clusters
+get_centers(algorithm, "macro")
+
+
+## Assign new texts to existing clusters
+data = data.frame(text=sample(c("Main Topic", "Something Different"), size=100, replace=T),stringsAsFactors=F)
+get_assignment(algorithm, data)
 ```
 
-The algorithm can also be evaluated using prequential (also interleaved test-then-train) evaluation:
+The algorithm can also be evaluated using prequential (interleaved test-then-train) evaluation:
 
 ```R
-evaluation = textClust::evaluate_cluster(algorithm, stream, measure=c("numMicroClusters", "purity"), n=500000, assign="micro", type="micro", assignMethod="nn", horizon=100)
+evaluation = textClust::evaluate_cluster(algorithm, stream, measure=c("numMicroClusters", "purity"), n=1000, assign="micro", type="micro", assignMethod="nn", horizon=100)
 ```
-
-## Data
-
-The algorithm assumes that the data-file comes in the following form (without the header):
-
-| Time | User | Text |
-| -----| -----| ---- |
-| 03/28/2017 14:59:48 | Albert Einstein |	Don't believe every quote you read on the internet! |
-| 03/28/2017 15:00:10 | Abraham Lincoln |	Well said, Albert! |
-| 03/28/2017 15:00:43 | Albert Einstein |	Thank you! |
-
-In our paper, we used the implemented algorithm to cluster chat messages from the streaming platform Twitch. In general, however, any kind of text data can be analysed.
