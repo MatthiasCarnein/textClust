@@ -83,6 +83,9 @@ DSC_textClust <- function(r=.4, lambda=0.1, tgap=1000, nmin=1, nmax=1, k=NA_inte
 #' @export
 get_assignment.DSC_textClust <- function(dsc, points, ...) {
 
+  ## select text column
+  points = points[,dsc$RObj$textCol, drop = FALSE]
+
   ## get mcs
   microClusters = dsc$RObj$C$get_microclusters()
 

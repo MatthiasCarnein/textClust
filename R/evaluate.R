@@ -96,6 +96,8 @@ evaluate <- function (dsc, dsd, measure, n = 100,
   type <- stream:::get_type(dsc, type)
 
   points <- get_points(dsd, n, cluster = TRUE)
+  ## select text column
+  points = points[,dsc$RObj$textCol, drop = FALSE]
   actual <- attr(points, "cluster")
 
   if(missing(measure) || is.null(measure)) {
@@ -462,7 +464,7 @@ silhouette <- function(points, actual, predict, dsc) {
   if(!is.null(actual)) noise <- actual==0 & predict==0
   else noise <- predict==0
 
-  points <- points[!noise,]
+  points <- points[!noise,,drop=F]
   predict <- predict[!noise]
 
 #  if(any(predict==0)) warning("silhouette: ", sum(predict==0), " non-noise points were predicted noise incorrectly and form their own cluster.")
@@ -473,7 +475,7 @@ silhouette <- function(points, actual, predict, dsc) {
     tf = as.list(table(tokens))
     if(length(tf)==0) return(NA)
     ## create temporary mc from text and timestamp
-    new(MicroCluster, tf, dsc$RObj$C$t)
+    new(MicroCluster, tf, dsc$RObj$C$t, 1)
   })
 
   predict = predict[!is.na(clusters)]

@@ -43,7 +43,7 @@ void MicroCluster::unmerge(MicroCluster* mc, int t, int omega, double lambda, bo
     // search key in current map (this)
     std::unordered_map<std::string, double>::iterator valIt = this->tf.find(it->first);
     if ( valIt != this->tf.end() ) {
-      // if element found: sum elements
+      // if element found: subtract elements
       valIt->second -= it->second;
       // remove insufficient elements
       if(valIt->second <= omega){
