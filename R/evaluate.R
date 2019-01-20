@@ -96,8 +96,6 @@ evaluate <- function (dsc, dsd, measure, n = 100,
   type <- stream:::get_type(dsc, type)
 
   points <- get_points(dsd, n, cluster = TRUE)
-  ## select text column
-  points = points[,dsc$RObj$textCol, drop = FALSE]
   actual <- attr(points, "cluster")
 
   if(missing(measure) || is.null(measure)) {
@@ -126,6 +124,9 @@ evaluate <- function (dsc, dsd, measure, n = 100,
 
   ## assign points
   predict <- get_assignment(dsc, points, type=assign, method=assignmentMethod, ...)
+
+  ## select text column
+  points = points[,dsc$RObj$textCol, drop = FALSE]
 
   ## translate micro to macro cluster ids if necessary
   if(type=="macro" && assign=="micro") predict <- microToMacro(dsc, predict)
