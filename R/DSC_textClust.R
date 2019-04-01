@@ -22,6 +22,9 @@
 #' @param groupByCol index of column that groups text into conversations (i.e. multiple texts into the same document)
 #' @param parentTextCol index of column that contains the text of the parent when using groupByCol
 #' @param parentTimeCol index of column that contains the time of the parent when using groupByCol
+#' @param timeFormat string formatting of time Column
+#' @param timePrecision Precision of fading, either seconds, minutes, hours or days
+#' @param fadeNaturalTime Logical whether Natural Time or Number of observations should be used for fading
 #'
 #' @return micro clusters
 #'
@@ -41,9 +44,9 @@
 #' @importFrom stopwords stopwords
 #'
 #' @export
-DSC_textClust <- function(r=.4, lambda=0.1, tgap=1000, nmin=1, nmax=1, k=NA_integer_, h=NA_real_, verbose = F, termFading =T, stopword=stopwords(language = "en", source = "stopwords-iso"), linkage="complete", weightedReclustering=TRUE, minWeight = 2, textCol = 1, timeCol = NA_integer_, groupByCol = NA_integer_, parentTextCol = NA_integer_, parentTimeCol = NA_integer_) {
+DSC_textClust <- function(r=.4, lambda=0.1, tgap=1000, nmin=1, nmax=1, k=NA_integer_, h=NA_real_, verbose = F, termFading =T, stopword=stopwords(language = "en", source = "stopwords-iso"), linkage="complete", weightedReclustering=TRUE, minWeight = 2, textCol = 1, timeCol = NA_integer_, groupByCol = NA_integer_, parentTextCol = NA_integer_, parentTimeCol = NA_integer_, timeFormat="%Y-%m-%d %H:%M:%S", timePrecision="days", fadeNaturalTime=FALSE) {
 
-  textClust <- textClust_R$new(r, lambda, tgap, nmin, nmax, k, h, verbose, termFading, stopword, linkage, weightedReclustering, minWeight, textCol, timeCol, groupByCol, parentTextCol, parentTimeCol)
+  textClust <- textClust_R$new(r=r, lambda=lambda, tgap=tgap, nmin=nmin, nmax=nmax, k=k, h=h, verbose=verbose, termFading=termFading, stopword=stopword, linkage=linkage, weightedReclustering=weightedReclustering, minWeight=minWeight, textCol=textCol, timeCol=timeCol, groupByCol=groupByCol, parentTextCol=parentTextCol, parentTimeCol=parentTimeCol, timeFormat=timeFormat, timePrecision=timePrecision, fadeNaturalTime=fadeNaturalTime)
 
   structure(
     list(

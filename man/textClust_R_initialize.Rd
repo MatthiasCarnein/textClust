@@ -33,6 +33,12 @@
 \item{textCol}{index of column that contains the text which should be clustered}
 
 \item{timeCol}{index of column that contains timestamps}
+
+\item{timeFormat}{string formatting of time Column}
+
+\item{timePrecision}{Precision of fading, either seconds, minutes, hours or days}
+
+\item{fadeNaturalTime}{Logical whether Natural Time or Number of observations should be used for fading}
 }
 \value{
 reference class object

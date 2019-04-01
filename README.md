@@ -55,5 +55,5 @@ get_assignment(algorithm, data)
 The algorithm can also be evaluated using prequential (interleaved test-then-train) evaluation:
 
 ```R
-evaluation = textClust::evaluate_cluster(algorithm, stream, measure=c("numMicroClusters", "silhouette"), n=1000, assign="micro", type="micro", assignMethod="nn", horizon=100)
+evaluation = textClust::evaluate_cluster(algorithm, stream, measure=c("numMicroClusters", "purity"), n=1000, assign="micro", type="micro", assignMethod="nn", horizon=100)
 ```

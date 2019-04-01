@@ -482,10 +482,8 @@ silhouette <- function(points, actual, predict, dsc) {
   predict = predict[!is.na(clusters)]
   clusters = clusters[!is.na(clusters)]
 
-  if(all(predict==0)){
+  if(all(predict==0) || length(unique(predict))==1){
     return(NA)
-  } else if(length(unique(predict))==1){
-    return(1)
   }
 
 

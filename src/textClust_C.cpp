@@ -14,11 +14,13 @@ public:
   bool verbose;
   double omega;
   int t;
+  int n;
   bool upToDate;
   bool upToDateWeights;
   bool termFading;
   std::vector<MicroCluster*> micro;
-  std::map<int, int> assignment;
+  std::unordered_map<std::string, int> assignment;
+  std::vector<std::string> assignmentOrder;
 
 
   textClust(double r, double lambda, int tgap, bool verbose, bool termFading){
@@ -29,51 +31,59 @@ public:
     this->omega = 0;
     if(lambda!=0) this->omega = pow(2, (-1*lambda * tgap));
     this->t = 0;
+    this->n = 0;
     this->upToDate=1;
     this->upToDateWeights=1;
     this->termFading = termFading;
   };
 
 
-  void removeObservation(int id, int time, Rcpp::List parent){
+  void removeObservation(std::string id, int time, Rcpp::List parent){
+    if(parent.size()){
+      std::unordered_map<std::string,int>::iterator it = this->assignment.find(id);
+      // if we have previously processed the parent
+      if(it != this->assignment.end()){
+        int i = this->assignment[id];
+        // and if cluster still exists
+        if(i != NA_INTEGER){
+          // remove from existing cluster
+          MicroCluster* mc = new MicroCluster(parent, time, 1);
 
-    std::map<int,int>::iterator it = this->assignment.find(id);
+          if(verbose) std::cout << "Remove observation from conversation " << id <<" in cluster " << i << std::endl;
+          this->micro[i]->unmerge(mc, this->t, this->omega, this->lambda, this->termFading);
+          // remove if insufficient weight or empty
+          if(this->micro[i]->weight <= this->omega || this->micro[i]->tf.size()==0){
+            if(verbose) std::cout << "Remove cluster " << i << std::endl;
 
-    // if we have previously processed the parent
-    if(it != this->assignment.end()){
-
-      // remove from existing cluster
-      MicroCluster* mc = new MicroCluster(parent, time, 1);
-
-      int i = this->assignment[id];
-
-      if(verbose) std::cout << "Remove observation " << time <<" from Micro Cluster " << i << std::endl;
-      this->micro[i]->unmerge(mc, this->t, this->omega, this->lambda, this->termFading);
-
-      // remove if insufficient weight or empty
-      if(this->micro[i]->weight <= this->omega || this->micro[i]->tf.size()==0){
-        if(verbose) std::cout << "Remove cluster " << i << std::endl;
-
-        delete this->micro[i];
-        this->micro.erase(this->micro.begin()+i); // remove cluster
-
-        for (std::map<int, int>::iterator it = this->assignment.begin(); it != this->assignment.end(); it++ ){
-          if(it->second == i) it->second = NA_INTEGER; // remove cluster assignment
-          if(it->second > i) it->second--; // due to removed cluster
+            delete this->micro[i];
+            this->micro.erase(this->micro.begin()+i); // remove cluster
+            for (std::unordered_map<std::string, int>::iterator it = this->assignment.begin(); it != this->assignment.end(); it++ ){
+              if(it->second == i) it->second = NA_INTEGER; // remove cluster assignment
+              if(it->second > i) it->second--; // due to removed cluster
+            }
+          }
+          delete mc;
         }
       }
-      delete mc;
     }
   }
 
 
-  void update(Rcpp::List x, int id){
 
-    // increment time
-    this->t++;
+  void update(Rcpp::List x, std::string id, int time =-1){
+
+    this->n++;
+
+    // decide whether we fade on real time or not
+    if(time == -1){
+      this->t = n;
+    } else{
+      this->t = time;
+    }
+
     this->upToDateWeights=0;
 
-    if(t%100 == 0) std::cout << t << std::endl;
+    if(this->n%100 == 0) std::cout << "Observation " << this->n << " at time " << this->t << std::endl;
 
     // if message contains tokens
     if(x.size()){
@@ -96,23 +106,25 @@ public:
         }
       }
       if(j != -1){
-        if(verbose) std::cout << "Merge observation " << this->t << " into Micro Cluster " << j << " at distance " << dist << std::endl;
+        if(verbose) std::cout << "Merge observation " << this->n << " at time " << this->t << " into Micro Cluster " << j << " at distance " << dist << " (Conversation " << id << ")" << std::endl;
         this->micro[j]->merge(mc, this->t, this->omega, this->lambda, this->termFading);
         delete mc;
         this->assignment[id]=j;
       } else{
-        if(verbose) std::cout << "Use observation " << this->t <<" to create new Micro Cluster " << this->micro.size() << std::endl;
+        if(verbose) std::cout << "Use observation " << this->n << " at time " << this->t << " to create new Micro Cluster " << this->micro.size() << " (Conversation " << id << ")" << std::endl;
         this->micro.push_back(mc);
         this->assignment[id]=this->micro.size()-1;
       }
-
     } else{
       this->assignment[id]=NA_INTEGER;
-      if(verbose) std::cout << "Observation " << this->t << " does not contain any token." << std::endl;
+      if(verbose) std::cout << "Observation " << this->n << " at time " << this->t << " does not contain any token." << " (Conversation " << id << ")" << std::endl;
     }
+    this->assignmentOrder.push_back(id);
+
 
     // remove outlier every tgap
-    if(this->t % this->tgap == 0){
+    if(this->n % this->tgap == 0){
+      if(verbose) Rcpp::Rcout<<"cleanup"<<std::endl;
       this->cleanup();
     }
   }
@@ -143,11 +155,11 @@ public:
 
     Rcpp::IntegerVector mapResult(this->assignment.size());
     Rcpp::CharacterVector mapResultNames(this->assignment.size());
-    int i=0;
-    for (std::map<int, int>::iterator it = this->assignment.begin(); it != this->assignment.end(); it++ ){
+    std::unordered_map<std::string, int>::iterator it;
+    for (unsigned int i=0; i<this->assignmentOrder.size(); i++){ // iterate insertion order
+      it = assignment.find(assignmentOrder[i]); // and look up value in map
       mapResult[i] = it->second;
       mapResultNames[i] = it->first;
-      i++;
     }
     mapResult.attr("names") = mapResultNames;
     return mapResult;
@@ -194,7 +206,7 @@ public:
         delete this->micro[i];
         this->micro.erase(this->micro.begin()+i); // remove cluster
 
-        for (std::map<int, int>::iterator it = this->assignment.begin(); it != this->assignment.end(); it++ ){
+        for (std::unordered_map<std::string, int>::iterator it = this->assignment.begin(); it != this->assignment.end(); it++ ){
           if(it->second == i) it->second = NA_INTEGER; // remove cluster assignment
           if(it->second > i) it->second--; // due to removed cluster
         }
@@ -345,13 +357,13 @@ private:
       while(j < micro.size()){
         double d = this->micro[i]->distance(this->micro[j], idf); // calc distance
         if(d <= r){
-          if(this->verbose) std::cout << "Merging " << j << " into " << i << std::endl;
+          if(this->verbose) std::cout << "Merging cluster " << j << " into cluster " << i << std::endl;
           this->micro[i]->merge(this->micro[j], this->t, this->omega, this->lambda, this->termFading); //merge mc into the other
           delete this->micro[j];
           this->micro.erase(this->micro.begin()+j); // remove the old mc
 
           // update cluster assignment
-          for (std::map<int, int>::iterator it = this->assignment.begin(); it != this->assignment.end(); it++ ){
+          for (std::unordered_map<std::string, int>::iterator it = this->assignment.begin(); it != this->assignment.end(); it++ ){
             if(it->second == (int)j) it->second = (int)i; // update cluster assignment
             if(it->second > (int)j) it->second--; // due to removed cluster
           }
@@ -385,6 +397,7 @@ RCPP_EXPOSED_CLASS(MicroCluster)
     .field("verbose", &textClust::verbose)
     .field("omega", &textClust::omega)
     .field("t", &textClust::t)
+    .field("n", &textClust::n)
     .field("upToDate", &textClust::upToDate)
     .field("termFading", &textClust::termFading)
     // .field("micro", &textClust::micro)

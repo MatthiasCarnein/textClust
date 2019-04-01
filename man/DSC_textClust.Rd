@@ -10,7 +10,8 @@ DSC_textClust(r = 0.4, lambda = 0.1, tgap = 1000, nmin = 1,
   "stopwords-iso"), linkage = "complete", weightedReclustering = TRUE,
   minWeight = 2, textCol = 1, timeCol = NA_integer_,
   groupByCol = NA_integer_, parentTextCol = NA_integer_,
-  parentTimeCol = NA_integer_)
+  parentTimeCol = NA_integer_, timeFormat = "\%Y-\%m-\%d \%H:\%M:\%S",
+  timePrecision = "days", fadeNaturalTime = FALSE)
 }
 \arguments{
 \item{r}{distance threshold to merge two micro-clusters}
@@ -48,6 +49,12 @@ DSC_textClust(r = 0.4, lambda = 0.1, tgap = 1000, nmin = 1,
 \item{parentTextCol}{index of column that contains the text of the parent when using groupByCol}
 
 \item{parentTimeCol}{index of column that contains the time of the parent when using groupByCol}
+
+\item{timeFormat}{string formatting of time Column}
+
+\item{timePrecision}{Precision of fading, either seconds, minutes, hours or days}
+
+\item{fadeNaturalTime}{Logical whether Natural Time or Number of observations should be used for fading}
 }
 \value{
 micro clusters

@@ -4,7 +4,7 @@
 \alias{get_assignment.DSC_textClust}
 \title{Get Assignment for DSC_textClust}
 \usage{
-\method{get_assignment}{DSC_textClust}(dsc, points)
+\method{get_assignment}{DSC_textClust}(dsc, points, ...)
 }
 \arguments{
 \item{dsc}{object of class DSC_textClust}

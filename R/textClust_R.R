@@ -16,6 +16,9 @@
 #' @field minWeight minimum weight of micro clusters to be used for reclustering
 #' @field textCol index of column that contains the text
 #' @field timeCol index of column that contains the timestamps
+#' @field timeFormat string formatting of time Column
+#' @field timePrecision Precision of fading, either seconds, minutes, hours or days
+#' @field fadeNaturalTime Logical whether Natural Time or Number of observations should be used for fading
 #'
 #' @author
 #' Dennis Assenmacher \email{dennis.assenmacher@@wi.uni-muenster.de}
@@ -42,7 +45,10 @@ textClust_R <- setRefClass("textClust_R",
                              hc = "ANY",
                              groupByCol = "integer",
                              parentTextCol = "integer",
-                             parentTimeCol = "integer"
+                             parentTimeCol = "integer",
+                             timeFormat = "character",
+                             timePrecision = "character",
+                             fadeNaturalTime = "logical"
                            ))
 
 
@@ -66,8 +72,10 @@ textClust_R <- setRefClass("textClust_R",
 #' @param minWeight minimum weight of micro clusters to be used for reclustering
 #' @param textCol index of column that contains the text which should be clustered
 #' @param timeCol index of column that contains timestamps
+#' @param timeFormat string formatting of time Column
+#' @param timePrecision Precision of fading, either seconds, minutes, hours or days
+#' @param fadeNaturalTime Logical whether Natural Time or Number of observations should be used for fading
 #'
-
 #' @author
 #' Dennis Assenmacher \email{dennis.assenmacher@@wi.uni-muenster.de}
 #' Matthias Carnein \email{matthias.carnein@@uni-muenster.de}
@@ -75,7 +83,7 @@ textClust_R <- setRefClass("textClust_R",
 #' @return reference class object
 NULL
 textClust_R$methods(
-  initialize = function(r, lambda, tgap, nmin, nmax, k, h, verbose, termFading, stopword, linkage, weightedReclustering, minWeight, textCol, timeCol, groupByCol, parentTextCol, parentTimeCol) {
+  initialize = function(r, lambda, tgap, nmin, nmax, k, h, verbose, termFading, stopword, linkage, weightedReclustering, minWeight, textCol, timeCol, groupByCol, parentTextCol, parentTimeCol, timeFormat, timePrecision, fadeNaturalTime) {
     ## fields in the r context
     nmin <<- as.integer(nmin)
     nmax <<- as.integer(nmax)
@@ -94,6 +102,10 @@ textClust_R$methods(
     groupByCol <<- as.integer(groupByCol)
     parentTextCol <<- as.integer(parentTextCol)
     parentTimeCol <<- as.integer(parentTimeCol)
+    timeFormat <<- as.character(timeFormat)
+    timePrecision <<- as.character(timePrecision)
+    fadeNaturalTime <<- as.logical(fadeNaturalTime)
+
     ## rest is passed to C class
     C <<- new(textClust, as.numeric(r), as.numeric(lambda), as.integer(tgap), as.logical(verbose), as.logical(termFading)) ## Exposed C class
     .self
@@ -122,11 +134,10 @@ textClust_R$methods(
 
     ## consider points one by one
     for(i in seq_len(nrow(newdata))){
-
       if(is.na(.self$groupByCol)){
-        id = .self$C$t ## incremental id
+        id = as.character(.self$C$n) ## incremental id (i.e. individual posts)
       } else{
-        id = newdata[i, .self$groupByCol] ## from data
+        id = as.character(newdata[i, .self$groupByCol]) ## from data (i.e. group by common id)
       }
 
       ## remove from existing cluster
@@ -134,10 +145,25 @@ textClust_R$methods(
         parent = newdata[i,.self$parentTextCol]
         time = newdata[i,.self$parentTimeCol]
 
-        tokens = tokenize_ngrams(parent, n = nmax, n_min = nmin, lowercase=TRUE, simplify = TRUE, stopwords=.self$stopword)
-        tf = as.list(table(tokens))
+        if(parent != "" & time != ""){
+          if(C$verbose) print(paste("Remove Text:", parent))
 
-        .self$C$removeObservation(id, time, tf)
+          time = as.POSIXct(strptime(time, .self$timeFormat))
+          if(.self$timePrecision=="days"){
+            time = as.integer(as.integer(time)/60/60/24)
+          } else if(.self$timePrecision == "hours"){
+            time = as.integer(as.integer(time)/60/60)
+          } else if(.self$timePrecision == "minutes"){
+            time = as.integer(as.integer(time)/60)
+          } else{
+            time = as.integer(time)
+          }
+
+          tokens = tokenize_ngrams(parent, n = nmax, n_min = nmin, lowercase=TRUE, simplify = TRUE, stopwords=.self$stopword)
+          tf = as.list(table(tokens))
+
+          .self$C$removeObservation(id, time, tf)
+        }
       }
 
 
@@ -149,27 +175,41 @@ textClust_R$methods(
         currenttime <<- as.character(newdata[i,.self$timeCol])
       }
 
-      if(C$verbose) print(paste("message:", x))
+      if(C$verbose) print(paste("Insert Text:", x))
 
       ## current time
-      startTime = Sys.time()
-
+      #startTime = Sys.time()
       ## split and tokenize sentence
       tokens = tokenize_ngrams(x, n = nmax, n_min = nmin, lowercase=TRUE, simplify = TRUE, stopwords=.self$stopword)
 
       ## count term frequency
       tf = as.list(table(tokens))
 
+      time = as.POSIXct(strptime(currenttime, .self$timeFormat))
+      if(.self$timePrecision=="days"){
+        time = as.integer(trunc(as.integer(time)/60/60/24))
+      } else if(.self$timePrecision == "hours"){
+        time = as.integer(trunc(as.integer(time)/60/60))
+      } else if(.self$timePrecision == "minutes"){
+        time = as.integer(trunc(as.integer(time)/60))
+      } else if(.self$timePrecision == "seconds"){
+        time = as.integer(time)
+      }
+
       ## insert into closest MC
-      C$update(tf, id)
+      if(!is.na(.self$timeCol) && .self$fadeNaturalTime){
+        C$update(tf, id, time)
+      } else{
+        C$update(tf, id, -1)
+      }
 
       ## getting messages per second
-      difference = difftime(Sys.time(),startTime,units="secs")
-      throughput[C$t] <<- difference
-      if(C$verbose){
-        print(paste("Time Difference: ",difference))
-        # print(paste("msg/s: ",counter))
-      }
+      #difference = difftime(Sys.time(),startTime,units="secs")
+      #throughput[C$t] <<- difference
+      # if(C$verbose){
+      #   print(paste("Time Difference: ",difference))
+      #   # print(paste("msg/s: ",counter))
+      # }
 
 
     }

@@ -38,6 +38,12 @@ Maintains the current clustering and implements the stream package interfaces.
 \item{\code{textCol}}{index of column that contains the text}
 
 \item{\code{timeCol}}{index of column that contains the timestamps}
+
+\item{\code{timeFormat}}{string formatting of time Column}
+
+\item{\code{timePrecision}}{Precision of fading, either seconds, minutes, hours or days}
+
+\item{\code{fadeNaturalTime}}{Logical whether Natural Time or Number of observations should be used for fading}
 }}
 
 
