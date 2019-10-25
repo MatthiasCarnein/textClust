@@ -61,7 +61,7 @@ void MicroCluster::merge(MicroCluster* mc, int t, int omega, double lambda, bool
 
   this->time = t;
 
-  //sum cluster weights
+  //subtract cluster weights
   this->weight = this->weight + mc->weight;
 
 
