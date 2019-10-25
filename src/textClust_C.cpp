@@ -322,22 +322,21 @@ public:
   }
 
 
-  Rcpp::List get_globalWeight(std::string token){
+Rcpp::List get_globalWeight(std::string token){
     Rcpp::List result;
-
+    double sum = 0;   
     for(unsigned int i=0; i<this->micro.size(); i++){
       MicroCluster tmp = *(this->micro[i]);
       std::unordered_map<std::string, double> tf = tmp.tf;
-
-      double sum = 0;
 
       // check if token already exists
       std::unordered_map<std::string, double>::iterator it = tf.find(token);
       if(it != tf.end()){
         sum += it->second;
       }
-      result[token] = sum;
+      
     }
+    result[token] = sum;
     return(result);
   }
 

@@ -35,7 +35,7 @@ void MicroCluster::unmerge(MicroCluster* mc, int t, int omega, double lambda, bo
 
   this->time = t;
 
-  //sum cluster weights
+  //subtract cluster weights
   this->weight = this->weight - mc->weight;
 
   // iterate tokens of mc
